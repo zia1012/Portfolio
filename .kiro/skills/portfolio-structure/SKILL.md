@@ -7,16 +7,27 @@ description: Stack choice, folder layout, section list, and where content lives 
 
 ## Stack
 
-No project exists yet at the time this skill was written. Default proposal, to be confirmed with the
-user before scaffolding:
+Confirmed with the user. This is final; do not propose alternatives.
 
-- **Framework:** Astro or Next.js (App Router) with TypeScript. Astro if the site is mostly static
-  content; Next.js if the user wants React-heavy interactivity or API routes.
-- **Styling:** Tailwind CSS.
+- **Framework:** Next.js 16 (App Router) with TypeScript. Next.js 16 has breaking changes from
+  older versions: per `AGENTS.md`, read the relevant guide in `node_modules/next/dist/docs/` before
+  writing code, and heed deprecation notices.
+- **Styling:** Tailwind CSS v4 via `@tailwindcss/turbopack` (no PostCSS config). Tokens live in
+  `src/app/globals.css` (`@theme`, `dark` class variant).
+- **3D:** `three`, `@react-three/fiber`, `@react-three/drei`.
+- **Scroll and animation:** `gsap` (ScrollTrigger) and `lenis` for smooth scroll.
+- **Fonts:** `next/font/google`: Space Grotesk (headings), Inter (body).
 - **Tests:** Vitest + Testing Library for components, Playwright for e2e.
-- **Hosting:** Vercel, Netlify, or GitHub Pages (static export).
+- **Hosting:** Vercel.
 
-Once the user picks, update this section with the actual choice so every agent sees it.
+No other UI, state, or animation libraries.
+
+## Theme
+
+One floating, code-generated 3D object (a stylised laptop/terminal) moves through scroll-driven
+chapters, one per section, while a particle field behind it changes shape per section. All of this
+sits behind a clean, readable text layout; the text never depends on the 3D. Use code-generated
+shapes and free models only.
 
 ## Folder layout (target)
 
@@ -27,6 +38,7 @@ src/
     layout/             Header, Footer, Nav, ThemeToggle
     sections/           Hero, About, Projects, Experience, Skills, Contact
     ui/                 Button, Card, Tag, Link — small reusable pieces
+    three/              R3F canvas, floating laptop/terminal, particle field, scroll chapters
   content/
     site.ts             name, role, tagline, social links, SEO defaults
     projects/           one file per project (Markdown/MDX or TS object)

@@ -1,0 +1,1769 @@
+@import "tailwindcss";
+
+/* Dark mode is driven by the `dark` class on <html>, set by the inline theme script in layout.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* The projector screen (.projector-surface) always uses the light tokens, in both themes. */
+:root,
+.projector-surface {
+  --background: #f4ede4;
+  --surface: #eadfd2;
+  --text: #2b1d14;
+  --text-muted: #6b5545;
+  /* 6.44:1 on background, 5.69:1 on surface, 7.48:1 white on accent; stays above 4.5:1 over
+     the scene (5.10:1 over the laptop under the 88% scrim, 5.51:1 over one dimmed dot). */
+  --accent: #8a3f1c;
+  --accent-contrast: #ffffff;
+  --border: #d9c9b8;
+  color-scheme: light;
+}
+
+/* The header on a project page sits above the always-dark projector room, so it uses the
+   dark tokens too (no seam). Tokens only: `dark:` utilities inside it, such as the theme
+   toggle icon, still follow the site theme on <html>. */
+.dark,
+body:has(.projector-room) > header {
+  --background: #1a120d;
+  --surface: #241912;
+  --text: #f4ede4;
+  --text-muted: #bfae9e;
+  --accent: #e07a45;
+  --accent-contrast: #1a120d;
+  --border: #3a2a20;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-border: var(--border);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
+
+  html {
+    /* Keep anchor targets and focused elements clear of the sticky header (h-16). */
+    scroll-padding-top: 5rem;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 0.25rem;
+  }
+
+  /* Text on the selection: 9.46:1 (light), 11.3:1 (dark). */
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 25%, var(--color-background));
+    color: var(--color-text);
+  }
+}
+
+/* Lenis smooth scroll (equivalent of lenis/dist/lenis.css). */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+@layer components {
+  /* Content placeholder, only rendered in development (see src/lib/content.ts). */
+  .todo {
+    color: var(--color-text-muted);
+    font-style: italic;
+    outline: 2px dashed var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+    padding-inline: 0.25rem;
+  }
+
+  /* Static decoration behind the page (and the whole background when 3D is off). */
+  .scene-fallback {
+    background:
+      radial-gradient(55% 45% at 78% 32%, color-mix(in oklab, var(--color-accent) 18%, transparent), transparent 70%),
+      radial-gradient(40% 40% at 12% 88%, color-mix(in oklab, var(--color-text-muted) 14%, transparent), transparent 70%);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .scene-fade-in {
+      animation: scene-fade-in 400ms ease-out both;
+    }
+  }
+}
+
+@keyframes scene-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   Home page: open, editorial layout (no boxes).
+   Readability comes from one scrim between the scene and the text. With 3D on it is drawn
+   inside the canvas (SceneScrim.tsx, scrimProfile.ts: same profile, over the laptop and
+   under the particles); the DOM version below is used for the static fallback only.
+   Particle dots over the text are dimmed to 0.105 alpha at their centre in the light theme
+   (DIM 0.15) and 0.21 in the dark theme (DIM 0.3). On the plain background that keeps
+   muted text at 5.14:1 (light; 4.43:1 where two dots overlap) / 6.27:1 (dark), text at
+   12.0:1 and accent at 5.51:1 (light). The dots never sit in front of the laptop in the text
+   zone (shape placement in Particles.tsx), so the laptop cases below are unchanged.
+   Worst case = the scene pixel with the least contrast to the text behind the scrim:
+   black-ish laptop screen in the light theme, a white highlight in the dark theme.
+   - Below md (laptop behind the text): uniform background at 88%.
+     Light: muted 4.58:1, text 10.7:1. Dark: muted 6.16:1, text 11.4:1.
+   - md+: background at 92% over the text column, fading out over 8rem after it.
+     Light: muted 5.03:1, accent 3.50:1 (large text only). Dark: muted 7.00:1.
+   The column ends at the max-w-6xl content edge + 44rem (about 60% of a 1280px viewport).
+   On the projects zig-zag the scrim mirrors to the right while an odd (right-hand) entry
+   is active, so text and laptop never share the clear side.
+   ========================================================================== */
+@layer components {
+  .scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    --scrim-colour: color-mix(in oklab, var(--color-background) 88%, transparent);
+  }
+
+  .scrim-layer {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim-colour);
+  }
+
+  .scrim-right {
+    display: none;
+  }
+
+  @media (min-width: 768px) {
+    .scrim {
+      --scrim-colour: color-mix(in oklab, var(--color-background) 92%, transparent);
+      /* Left edge of the max-w-6xl content (px-6 below 72rem + 3rem). */
+      --scrim-col-start: max(1.5rem, 50% - 36rem);
+      --scrim-solid: calc(var(--scrim-col-start) + 44rem);
+      --scrim-clear: calc(var(--scrim-solid) + 8rem);
+    }
+
+    .scrim-left {
+      background: linear-gradient(
+        to right,
+        var(--scrim-colour) 0,
+        var(--scrim-colour) var(--scrim-solid),
+        transparent var(--scrim-clear)
+      );
+    }
+
+    .scrim-right {
+      display: block;
+      opacity: 0;
+      background: linear-gradient(
+        to left,
+        var(--scrim-colour) 0,
+        var(--scrim-colour) var(--scrim-solid),
+        transparent var(--scrim-clear)
+      );
+    }
+
+    .scrim[data-side="right"] .scrim-left {
+      opacity: 0;
+    }
+
+    .scrim[data-side="right"] .scrim-right {
+      opacity: 1;
+    }
+  }
+
+  /* Soft halo behind large headings only (h1, h2). */
+  .text-halo {
+    text-shadow: 0 0 1.25rem color-mix(in oklab, var(--color-background) 85%, transparent);
+  }
+
+  /* Hero kicker: the typed role and location sit on one line, wrapping as whole parts. */
+  .hero-kicker .type-line {
+    display: inline-block;
+  }
+
+  .hero-name {
+    font-size: clamp(2.5rem, 7.5vw, 6rem);
+    line-height: 0.98;
+  }
+
+  /* Last word of the name: accent outline (solid accent where text-stroke is missing). */
+  .hero-name-accent {
+    color: var(--color-accent);
+  }
+
+  @supports (-webkit-text-stroke: 1px) {
+    .hero-name-accent {
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke: max(1.5px, 0.022em) var(--color-accent);
+    }
+
+    /* Light theme: a thicker stroke and a faint accent fill, so the thin outline holds up on
+       cream. The dark theme keeps the hollow outline above. */
+    :root:not(.dark) .hero-name-accent {
+      -webkit-text-fill-color: color-mix(in oklab, var(--color-accent) 12%, transparent);
+      -webkit-text-stroke-width: max(2px, 0.03em);
+    }
+
+    .hero-name-accent .type-caret::after {
+      -webkit-text-fill-color: var(--color-accent);
+      -webkit-text-stroke: 0;
+    }
+
+    /* Selected hollow letters get a solid fill, so they read on the selection colour. */
+    .hero-name-accent::selection,
+    .hero-name-accent *::selection {
+      -webkit-text-fill-color: var(--color-text);
+    }
+  }
+
+  @media (forced-colors: active) {
+    .hero-name-accent,
+    :root:not(.dark) .hero-name-accent {
+      -webkit-text-fill-color: currentColor;
+      -webkit-text-stroke: 0;
+    }
+  }
+
+  /* Decorative scroll cue at the bottom of the hero. */
+  .scroll-cue-line {
+    position: relative;
+    display: block;
+    width: 1px;
+    height: 2.5rem;
+    overflow: hidden;
+    background: var(--color-border);
+  }
+
+  .scroll-cue-line::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--color-accent);
+    transform-origin: top;
+  }
+
+  /* Section heading rule: thin accent line fading to the right. */
+  .section-rule {
+    display: block;
+    width: min(100%, 42rem);
+    height: 1px;
+    background: linear-gradient(to right, var(--color-accent), color-mix(in oklab, var(--color-accent) 0%, transparent));
+    transform-origin: left;
+  }
+
+  /* Plain-text list separated by " · " (project tags). */
+  .dot-list > li:not(:last-child)::after {
+    content: "\00B7";
+    content: "\00B7" / "";
+    padding-inline: 0.5em;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Incoming scrim fades in first, the outgoing one follows, so text is never uncovered. */
+  .scrim-layer {
+    transition: opacity 300ms ease-out;
+  }
+
+  .scrim[data-side="right"] .scrim-left,
+  .scrim:not([data-side="right"]) .scrim-right {
+    transition-delay: 250ms;
+  }
+
+  /* Three passes (4.8s), under the 5s limit for auto-playing motion. */
+  .scroll-cue-line::after {
+    animation: scroll-cue 1.6s ease-in-out 3 both;
+  }
+
+  @supports (animation-timeline: view()) {
+    .section-rule {
+      animation: rule-grow linear both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 35%;
+    }
+  }
+}
+
+@keyframes scroll-cue {
+  0% {
+    transform: scaleY(0);
+  }
+  50% {
+    transform: scaleY(1);
+    transform-origin: top;
+  }
+  50.1% {
+    transform-origin: bottom;
+  }
+  100% {
+    transform: scaleY(0);
+    transform-origin: bottom;
+  }
+}
+
+@keyframes rule-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ==========================================================================
+   Hero typing (TypeSequence / TypeLine).
+   The real text (.type-ghost) always stays in the layout, so the card never changes
+   size. The aria-hidden overlay (.type-typed) is laid on top of it while typing and
+   holds the full text too (untyped part invisible), so it wraps like the real text.
+   Text is only hidden under [data-typing], which is set by JS, and only with
+   prefers-reduced-motion: no-preference. Otherwise everything shows at once.
+   ========================================================================== */
+@layer components {
+  .type-line {
+    position: relative;
+    display: block;
+  }
+
+  .type-typed {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* opacity (not visibility) keeps the real text in the accessibility tree. */
+  .type-seq[data-typing] .type-ghost {
+    opacity: 0;
+  }
+
+  .type-seq[data-typing] .type-typed {
+    display: block;
+    position: absolute;
+    inset: 0;
+  }
+
+  .type-rest {
+    visibility: hidden;
+  }
+
+  /* Zero-width inline anchor, so the caret never changes where lines wrap. */
+  .type-caret {
+    position: relative;
+    display: none;
+  }
+
+  .type-seq[data-typing] .type-line[data-active] .type-caret {
+    display: inline;
+  }
+
+  .type-caret::after {
+    content: "|";
+    position: absolute;
+    left: 0.04em;
+    top: 50%;
+    translate: 0 -50%;
+    line-height: 1;
+    font-weight: 400;
+    color: var(--color-accent);
+    animation: type-caret-blink 1s steps(1) infinite;
+  }
+
+  .type-reveal {
+    transition:
+      opacity 250ms ease-out,
+      translate 250ms ease-out,
+      visibility 250ms;
+  }
+
+  .type-seq[data-typing]:not([data-revealed]) .type-reveal {
+    opacity: 0;
+    translate: 0 0.5rem;
+    visibility: hidden;
+  }
+}
+
+@keyframes type-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Projector: project detail page (/projects/[slug]).
+   A dark room (scoped `dark` class on <main>), a CSS projector, a light beam,
+   and a pull-down screen whose surface uses the light tokens (see :root above).
+   Every animation sits inside prefers-reduced-motion: no-preference; without it
+   everything is shown in its final state.
+   ========================================================================== */
+/* The detail page fits one viewport: the page itself never scrolls, only an overflowing
+   slide scrolls inside the screen. Unlayered so it beats the body's overflow-x-clip utility.
+   With JS off, ProjectorRoom's <noscript> style undoes this so the stacked slides can scroll. */
+body:has(.projector-room) {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body:has(.projector-room) > footer {
+  display: none;
+}
+
+/* The header's bg-background/85 would show the cream body through it; solid dark instead.
+   Unlayered, so it beats the utility. */
+body:has(.projector-room) > header {
+  background-color: var(--background);
+}
+
+@layer components {
+  /* Flex column: projector (fixed) → deck (screen grows, control bar auto).
+     All vertical sizes of the projector parts are variables, so the beam keeps lining up
+     with the lens and the screen when the short-viewport tiers below shrink them. */
+  .projector-room {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding-bottom: var(--room-pad);
+    /* Projector box size. */
+    --projector-w: 7rem;
+    --projector-h: 3rem;
+    --rod-h: 0.75rem;
+    --lens-size: 1.5rem;
+    /* How far the lens hangs below the projector box. */
+    --lens-drop: 0.5rem;
+    /* Distance from the projector box to the top of the screen (the visible beam gap). */
+    --beam-throw: 3rem;
+    --roller-h: 1rem;
+    /* How much the surface tucks under the roller. */
+    --roller-overlap: 0.25rem;
+    /* Space under the surface for the weight bar and pull tab. */
+    --weight-space: 1.75rem;
+    --weight-h: 0.75rem;
+    --weight-bottom: 1rem;
+    /* Gap above the control bar: 0.25rem + 36px controls ≈ 40px; the screen gets the rest. */
+    --controls-gap: 0.25rem;
+    --room-pad: 1rem;
+    /* Resolved here, in the dark scope, so the screen parts can use them. */
+    --room-ink: color-mix(in oklab, var(--background) 45%, black);
+    --beam-light: color-mix(in oklab, var(--text) 85%, var(--accent));
+    background:
+      radial-gradient(60% 40% at 50% 12%, color-mix(in oklab, var(--accent) 9%, transparent), transparent 70%),
+      radial-gradient(120% 90% at 50% 30%, var(--surface) 0%, var(--background) 55%, var(--room-ink) 100%);
+  }
+
+  @media (min-width: 640px) {
+    .projector-room {
+      --beam-throw: 3.5rem;
+    }
+  }
+
+  /* Short viewports (650–768px laptops): smaller projector, short throw. */
+  @media (max-height: 760px) {
+    .projector-room {
+      --projector-w: 5.5rem;
+      --projector-h: 2.25rem;
+      --rod-h: 0.5rem;
+      --lens-size: 1.25rem;
+      --lens-drop: 0.375rem;
+      --beam-throw: 1rem;
+      --roller-h: 0.75rem;
+      --weight-space: 1.25rem;
+      --weight-h: 0.5rem;
+      --weight-bottom: 0.75rem;
+      --controls-gap: 0.25rem;
+      --room-pad: 0.25rem;
+    }
+  }
+
+  /* Very short viewports (450px windows, phones in landscape): the screen gets almost all
+     of the height. The lens almost touches the roller and the bars are slim. */
+  @media (max-height: 520px) {
+    .projector-room {
+      --projector-w: 4rem;
+      --projector-h: 1.5rem;
+      --rod-h: 0.375rem;
+      --lens-size: 1rem;
+      --lens-drop: 0.375rem;
+      --beam-throw: 0.25rem;
+      --roller-h: 0.625rem;
+      --roller-overlap: 0.375rem;
+      --weight-space: 0.625rem;
+      --weight-h: 0.5rem;
+      --weight-bottom: 0.25rem;
+      --controls-gap: 0rem;
+      --room-pad: 0rem;
+    }
+  }
+
+  .projector-stage {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .projector-deck {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* Ceiling-mounted projector: a short rod, the body, and a glowing lens facing the screen.
+     Above the roller (z-index 2), because on short viewports the lens overlaps it. */
+  .projector {
+    position: relative;
+    z-index: 3;
+    flex-shrink: 0;
+    width: var(--projector-w);
+    height: var(--projector-h);
+    margin-inline: auto;
+  }
+
+  .projector::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 0.375rem;
+    height: calc(var(--rod-h) + 0.125rem);
+    translate: -50% 0;
+    background: var(--border);
+  }
+
+  .projector-body {
+    position: absolute;
+    inset: var(--rod-h) 0 0;
+    border: 1px solid var(--border);
+    border-radius: 0.625rem 0.625rem 0.875rem 0.875rem;
+    background:
+      repeating-linear-gradient(90deg, var(--room-ink) 0 2px, transparent 2px 5px) 0.75rem 0.5rem / 1.5rem 0.75rem no-repeat,
+      linear-gradient(to bottom, color-mix(in oklab, var(--border), white 8%), var(--surface));
+    box-shadow: 0 0.5rem 1rem var(--room-ink);
+  }
+
+  .projector-lens {
+    position: absolute;
+    left: 50%;
+    bottom: calc(-1 * var(--lens-drop));
+    width: var(--lens-size);
+    height: var(--lens-size);
+    translate: -50% 0;
+    border: 2px solid var(--room-ink);
+    border-radius: 9999px;
+    background: radial-gradient(circle at 50% 45%, var(--beam-light) 0 18%, var(--accent) 50%, color-mix(in oklab, var(--accent) 40%, black) 80%);
+    box-shadow:
+      0 0 0.75rem 0.2rem color-mix(in oklab, var(--accent) 55%, transparent),
+      0 0 2rem 0.5rem color-mix(in oklab, var(--beam-light) 22%, transparent);
+  }
+
+  /* Pull-down screen. No z-index here, so the beam can blend with the room behind it. */
+  .projector-screen {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    /* Sized from the available height. On very tall screens stop at about 16:10 of the
+       max-w-5xl width (40rem surface + roller and weight bar), so it never looks like a door. */
+    max-height: 44rem;
+    margin-top: var(--beam-throw);
+  }
+
+  .projector-beam {
+    position: absolute;
+    left: -5%;
+    right: -5%;
+    /* From the lens centre (lens-drop minus half the lens below the projector box)
+       down to the bottom of the screen surface. */
+    top: calc(var(--lens-drop) - var(--lens-size) / 2 - var(--beam-throw));
+    bottom: var(--weight-space);
+    pointer-events: none;
+    clip-path: polygon(47% 0, 53% 0, 100% 100%, 0 100%);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--beam-light) 55%, transparent),
+      color-mix(in oklab, var(--beam-light) 14%, transparent) 55%,
+      transparent
+    );
+    mix-blend-mode: screen;
+    opacity: 0.35;
+  }
+
+  .projector-dust span {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background: var(--beam-light);
+    opacity: 0;
+  }
+
+  .projector-dust span:nth-child(1) {
+    left: 44%;
+    top: 22%;
+  }
+
+  .projector-dust span:nth-child(2) {
+    left: 56%;
+    top: 34%;
+  }
+
+  .projector-dust span:nth-child(3) {
+    left: 38%;
+    top: 52%;
+  }
+
+  .projector-dust span:nth-child(4) {
+    left: 63%;
+    top: 61%;
+  }
+
+  .projector-dust span:nth-child(5) {
+    left: 50%;
+    top: 74%;
+  }
+
+  .projector-roller {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    height: var(--roller-h);
+    margin-inline: -0.5rem;
+    border-radius: 9999px;
+    background: linear-gradient(to bottom, color-mix(in oklab, var(--border), white 10%) 0%, var(--border) 40%, var(--room-ink) 100%);
+    box-shadow: 0 0.25rem 0.625rem var(--room-ink);
+  }
+
+  .projector-unroll {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    margin-top: calc(-1 * var(--roller-overlap));
+    /* Room for the weight bar and pull tab under the surface. */
+    padding-bottom: var(--weight-space);
+  }
+
+  .projector-surface {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid color-mix(in oklab, var(--text) 60%, black);
+    color: var(--text);
+    /* Matte cream with a hot spot where the beam lands. Edges stay at --surface (#eadfd2),
+       so muted text keeps at least 5.3:1. */
+    background: radial-gradient(
+      65% 60% at 50% 40%,
+      color-mix(in oklab, var(--background) 55%, white) 0%,
+      var(--background) 55%,
+      var(--surface) 100%
+    );
+    box-shadow: 0 1.5rem 3rem -1rem var(--room-ink);
+  }
+
+  .projector-weight-track {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .projector-weight {
+    position: absolute;
+    left: -0.25rem;
+    right: -0.25rem;
+    bottom: var(--weight-bottom);
+    height: var(--weight-h);
+    border-radius: 0.25rem;
+    background: linear-gradient(to bottom, color-mix(in oklab, var(--border), white 6%), var(--room-ink));
+    box-shadow: 0 0.25rem 0.5rem var(--room-ink);
+  }
+
+  /* Cord and pull tab. */
+  .projector-weight::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    width: 1.25rem;
+    /* Fills the space under the weight bar: 0.875rem normally, a stub on short viewports. */
+    height: min(0.875rem, var(--weight-bottom));
+    translate: -50% 0;
+    border-radius: 0 0 0.5rem 0.5rem;
+    background:
+      linear-gradient(var(--border), var(--border)) 50% 0 / 2px 45% no-repeat,
+      linear-gradient(var(--border), var(--border)) 0 100% / 100% 55% no-repeat;
+  }
+
+  /* Control bar under the screen. Phones: two rows (Prev / dots / Next, then the back link).
+     sm and up: one row, back link on the left and the slide nav centred. */
+  .deck-controls {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: var(--controls-gap);
+  }
+
+  @media (min-width: 640px) {
+    .deck-controls {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      column-gap: 1rem;
+    }
+
+    .deck-nav {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .deck-back {
+      grid-column: 1;
+      grid-row: 1;
+      justify-self: start;
+    }
+  }
+
+  /* Slides. They share one grid cell that is exactly the surface's height, so the screen
+     never jumps when the slide changes; a slide taller than that scrolls in .deck-body. */
+  /* The viewport is a size container: slide spacing and type below use cqh/cqw, so the
+     content scales with the screen instead of scrolling. (With JS off, ProjectorRoom's
+     <noscript> style makes it an inline-size container so the stacked slides can grow.) */
+  .deck-viewport {
+    container: deck / size;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    flex: 1;
+    min-height: 0;
+    touch-action: pan-y;
+  }
+
+  .deck-slide {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: clamp(0.5rem, 3cqh, 1.5rem) clamp(1rem, 4cqw, 2.5rem);
+  }
+
+  .deck-slide:not([data-active]) {
+    visibility: hidden;
+  }
+
+  .deck-slide:focus-visible {
+    outline-offset: -4px;
+  }
+
+  .deck-strip,
+  .deck-foot {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-family: var(--font-heading);
+    font-size: clamp(0.6875rem, 2.6cqh, 0.8125rem);
+    line-height: 1.25;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .deck-strip {
+    padding-bottom: clamp(0.25rem, 1.5cqh, 0.5rem);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .deck-foot {
+    padding-top: clamp(0.25rem, 1.5cqh, 0.5rem);
+    border-top: 1px solid var(--border);
+  }
+
+  /* On a very short screen the foot (slide name and number, decorative) gives its
+     height to the content; the strip above still shows the counter. */
+  @container deck (max-height: 20rem) {
+    .deck-foot {
+      display: none;
+    }
+  }
+
+  /* Fallback only: scrolls when a slide really is taller than the screen. Plain
+     overflow-y: auto, so no scrollbar track shows while the content fits. */
+  .deck-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    padding-block: clamp(0.375rem, 2.5cqh, 1.5rem);
+  }
+
+  /* Centred while it fits; auto margins drop to 0 on overflow, so the top stays reachable
+     (justify-content: center would push it out of the scroll area). */
+  .deck-body > :first-child {
+    margin-top: auto;
+  }
+
+  .deck-body > :last-child {
+    margin-bottom: auto;
+  }
+
+  .deck-body:focus-visible {
+    outline-offset: -3px;
+  }
+
+  /* Slide type scale. Sizes follow the screen height (cqh), limited by its width (cqw) on
+     narrow phones, and clamped to a readable minimum and a sensible maximum. */
+  .slide-title {
+    font-size: clamp(1.5rem, min(10cqh, 9cqw), 3rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    overflow-wrap: anywhere;
+  }
+
+  .slide-heading {
+    font-size: clamp(1.1rem, min(7cqh, 7cqw), 2.25rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+  }
+
+  .slide-rule {
+    display: block;
+    width: 3rem;
+    height: 0.1875rem;
+    margin-top: clamp(0.25rem, 1.5cqh, 0.75rem);
+    border-radius: 9999px;
+    background: var(--accent);
+  }
+
+  .slide-content {
+    margin-top: clamp(0.5rem, 2.5cqh, 1.5rem);
+  }
+
+  .slide-gap {
+    margin-top: clamp(0.5rem, 2.5cqh, 1.25rem);
+  }
+
+  /* Compact link buttons on the overview slide. Padding and shape come from buttonClasses. */
+  .slide-cta {
+    min-height: 44px;
+    max-width: 100%;
+    font-size: clamp(0.85rem, 3.4cqh, 1.05rem);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .slide-summary {
+    font-size: clamp(0.9rem, 4.6cqh, 1.25rem);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  /* Single-paragraph slides (role, problem, outcome): a larger, comfortable measure. */
+  .slide-statement {
+    max-width: 70ch;
+    font-size: clamp(1rem, min(5.2cqh, 5cqw), 1.625rem);
+    line-height: 1.5;
+  }
+
+  .slide-list {
+    list-style: disc;
+    font-size: clamp(0.85rem, 4.2cqh, 1.25rem);
+    line-height: 1.45;
+  }
+
+  /* Indent per item (not on the list), so both columns line up the same way. */
+  .slide-list li {
+    margin-left: 1.15em;
+    break-inside: avoid;
+    padding-bottom: clamp(0.25rem, 1.5cqh, 0.75rem);
+  }
+
+  .slide-list li:last-child {
+    padding-bottom: 0;
+  }
+
+  .slide-list li::marker {
+    color: var(--accent);
+  }
+
+  /* Overview: text and screenshot stacked; side by side (about 55/45) on a wide screen. */
+  .slide-overview {
+    display: grid;
+    gap: clamp(0.75rem, 4cqh, 2rem);
+    align-items: center;
+  }
+
+  /* Screenshot (wide, about 2.1:1, rendered at 1200×580) and placeholder (16:9) never take
+     more than 60% of the screen height: the width is derived from that height cap.
+     object-fit: cover keeps any other aspect ratio undistorted (cropped, not stretched). */
+  .slide-media {
+    justify-self: center;
+    width: min(100%, calc(60cqh * 1200 / 580));
+    height: auto;
+    aspect-ratio: 1200 / 580;
+    object-fit: cover;
+    object-position: top;
+  }
+
+  /* No screenshot: one column with a comfortable reading width, left-aligned like the other
+     slides and vertically centred by the grid. */
+  .slide-overview-solo {
+    max-width: 62ch;
+  }
+
+  /* Short screens (e.g. a 1023×450 window): the overview text column gets tighter spacing
+     so the link row fits without scrolling. Type sizes stay as they are. */
+  @container deck (max-height: 22rem) {
+    .slide-overview .slide-gap {
+      margin-top: 0.25rem;
+    }
+  }
+
+  @container deck (min-width: 40rem) {
+    .slide-overview:not(.slide-overview-solo) {
+      grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+      gap: clamp(1.5rem, 4cqw, 3rem);
+    }
+
+    .slide-list-split {
+      columns: 2;
+      column-gap: clamp(1.5rem, 4cqw, 3rem);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Load: the screen unrolls, then the beam comes on, then the first slide appears. */
+  .projector-surface {
+    animation: projector-unroll 700ms ease-out var(--transition-delay, 0ms) backwards;
+  }
+
+  .projector-weight-track {
+    animation: projector-weight-drop 700ms ease-out var(--transition-delay, 0ms) backwards;
+  }
+
+  .projector-beam {
+    animation: projector-beam-on 450ms ease-out calc(550ms + var(--transition-delay, 0ms)) backwards;
+  }
+
+  .deck-viewport {
+    animation: projector-fade-in 300ms ease-out calc(750ms + var(--transition-delay, 0ms)) backwards;
+  }
+
+  /* A few specks drift once through the beam (under 5s, then stay hidden). */
+  .projector-dust span {
+    animation: projector-dust 4.5s ease-in-out calc(1s + var(--transition-delay, 0ms)) 1 both;
+  }
+
+  .projector-dust span:nth-child(2) {
+    animation-delay: calc(1.6s + var(--transition-delay, 0ms));
+  }
+
+  .projector-dust span:nth-child(3) {
+    animation-delay: calc(2.2s + var(--transition-delay, 0ms));
+  }
+
+  .projector-dust span:nth-child(4) {
+    animation-delay: calc(1.3s + var(--transition-delay, 0ms));
+  }
+
+  .projector-dust span:nth-child(5) {
+    animation-delay: calc(2s + var(--transition-delay, 0ms));
+  }
+
+  /* Slide change: a short projector flicker. Only after the visitor changes slides. */
+  .projector-deck[data-interacted] .deck-slide[data-active] {
+    animation: projector-flicker 220ms ease-out;
+  }
+}
+
+@keyframes projector-unroll {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes projector-weight-drop {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes projector-beam-on {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes projector-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes projector-dust {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  30% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0.75rem, -1.25rem);
+  }
+}
+
+@keyframes projector-flicker {
+  0% {
+    opacity: 0;
+    filter: brightness(1.6);
+  }
+  35% {
+    opacity: 0.9;
+    filter: brightness(1.25);
+  }
+  55% {
+    opacity: 0.65;
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+/* ==========================================================================
+   Skills section (#skills): skill globe (SkillGlobe.tsx).
+   The globe is a size reference (cqw) for the words, which SkillGlobe positions with
+   inline transforms: a static snapshot from the server, then one rAF loop when motion
+   is allowed. Glow, outline and equator ring are static decoration.
+   ========================================================================== */
+@layer components {
+  .skill-globe {
+    container-type: inline-size;
+    /* Horizontal drags rotate the globe; vertical swipes still scroll the page. */
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .skill-globe::before {
+    content: "";
+    position: absolute;
+    inset: 2%;
+    z-index: 0;
+    border-radius: 9999px;
+    pointer-events: none;
+    /* Opaque disc in the page colour with a faint accent centre, so the words never sit
+       on the laptop or the particles. Solid out to the outline (84% wide = 87.5% of this
+       radius), then a short fade. Front muted words: 5.00:1 light, 7.49:1 dark. */
+    background: radial-gradient(
+      closest-side,
+      color-mix(in oklab, var(--color-accent) 12%, var(--color-background)) 0%,
+      var(--color-background) 88%,
+      transparent 100%
+    );
+  }
+
+  .skill-globe-outline,
+  .skill-globe-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 0;
+    width: 84%;
+    translate: -50% -50%;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .skill-globe-outline {
+    aspect-ratio: 1;
+    border: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
+  }
+
+  /* Equator seen from slightly above: height = width × sin(0.3 rad tilt). */
+  .skill-globe-ring {
+    height: 25%;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 35%, transparent);
+  }
+
+  .skill-globe-word {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    white-space: nowrap;
+    font-size: clamp(0.75rem, 3.4cqw, 1.0625rem);
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  /* Forgiving hit box: 0.35em of padding, cancelled by the negative margin so layout is unchanged. */
+  .skill-globe-label {
+    padding: 0.35em;
+    margin: -0.35em;
+  }
+
+  .skill-globe[data-dragging],
+  .skill-globe[data-dragging] .skill-globe-word {
+    cursor: grabbing;
+  }
+
+  /* Hover (mouse only, not while dragging): pure CSS, so the rAF loop and the rotation speed are
+     untouched. !important beats the per-frame inline opacity/z-index on the outer span and the
+     Tailwind scale/colour utilities on the label. Label text uses --text (not accent) for contrast.
+     The hovered word only grows and brightens; there is no background or outline. */
+  @media (hover: hover) and (pointer: fine) {
+    .skill-globe:not([data-dragging]) .skill-globe-word:hover {
+      z-index: 200 !important;
+      opacity: 1 !important;
+    }
+
+    .skill-globe:not([data-dragging]) .skill-globe-word:hover .skill-globe-label {
+      scale: 1.5 !important;
+      opacity: 1 !important;
+      color: var(--text) !important;
+      font-weight: 600;
+    }
+  }
+}
+
+/* ==========================================================================
+   Experience section (#experience): "git log --graph" timeline.
+   A grey graph line with an accent line on top that draws as you scroll, commit nodes,
+   a side branch (education) merged into the line, and git-tag certification pills.
+   Scroll effects use CSS scroll-driven animations, only inside
+   @supports (animation-timeline: view()) and prefers-reduced-motion: no-preference.
+   Otherwise the accent line is fully drawn and every card is simply shown.
+   ========================================================================== */
+@layer components {
+  .git-log {
+    /* Centre of the main graph line, from the content edge (1rem from the screen at 360px). */
+    --graph-x: 0rem;
+    --node-size: 0.875rem;
+    /* Node centre from the top of an entry: half the mono top row (leading-5). */
+    --node-top: 0.625rem;
+    /* Space between the line and the entry text. */
+    --commit-indent: 1.5rem;
+    /* How far the education branch sits to the right of the main line. */
+    --lane-offset: 1.5rem;
+    --merge-h: 3rem;
+    --branch-colour: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  }
+
+  @media (min-width: 768px) {
+    .git-log {
+      --graph-x: 0.75rem;
+      --commit-indent: 2.25rem;
+    }
+  }
+
+  .git-graph {
+    position: relative;
+  }
+
+  .git-line,
+  .git-line-progress {
+    position: absolute;
+    left: var(--graph-x);
+    top: var(--node-top);
+    bottom: 0;
+    width: 2px;
+    translate: -50% 0;
+    border-radius: 9999px;
+    pointer-events: none;
+  }
+
+  /* With a merge, the main line ends where the curved connector starts. */
+  .git-graph[data-merge] .git-line,
+  .git-graph[data-merge] .git-line-progress {
+    bottom: var(--merge-h);
+  }
+
+  .git-line {
+    background: var(--color-border);
+  }
+
+  /* Light theme: --border is 1.39:1 on cream; half-strength muted is 2.2:1. */
+  :root:not(.dark) .git-line {
+    background: color-mix(in oklab, var(--color-text-muted) 50%, transparent);
+  }
+
+  .git-line-progress {
+    background: var(--color-accent);
+    transform-origin: top;
+  }
+
+  .git-merge {
+    display: block;
+    width: calc(var(--lane-offset) + 2px);
+    height: var(--merge-h);
+    margin-left: calc(var(--graph-x) - 1px);
+    overflow: visible;
+    color: var(--branch-colour);
+  }
+
+  .git-commit,
+  .git-branch-item {
+    position: relative;
+    min-width: 0;
+    padding-left: calc(var(--graph-x) + var(--commit-indent));
+  }
+
+  .git-branch-item {
+    padding-left: calc(var(--graph-x) + var(--lane-offset) + var(--commit-indent));
+  }
+
+  /* Branch lane from the connector (or the previous school) down to this node. */
+  .git-branch-item::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--graph-x) + var(--lane-offset));
+    top: 0;
+    height: var(--node-top);
+    width: 2px;
+    translate: -50% 0;
+    background: var(--branch-colour);
+  }
+
+  /* Between schools, the lane continues across the list gap (gap-10). */
+  .git-branch-item:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--graph-x) + var(--lane-offset));
+    top: var(--node-top);
+    bottom: -2.5rem;
+    width: 2px;
+    translate: -50% 0;
+    background: var(--branch-colour);
+  }
+
+  .git-node {
+    position: absolute;
+    z-index: 1;
+    left: var(--graph-x);
+    top: var(--node-top);
+    width: var(--node-size);
+    height: var(--node-size);
+    translate: -50% -50%;
+    border: 2px solid var(--color-accent);
+    border-radius: 9999px;
+    background: var(--color-background);
+  }
+
+  .git-node-branch {
+    left: calc(var(--graph-x) + var(--lane-offset));
+  }
+
+  /* Current job (HEAD): filled, with a soft halo. */
+  .git-node[data-head] {
+    background: var(--color-accent);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-accent) 22%, transparent);
+  }
+
+  /* Diff-style bullets. The "+" has empty alt text, so screen readers skip it. */
+  .git-diff > li {
+    position: relative;
+    padding-left: 1.25rem;
+  }
+
+  .git-diff > li::before {
+    content: "+";
+    content: "+" / "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Three pulses (4.8s), under the 5s limit for auto-playing motion. */
+  .git-node[data-head] {
+    animation: git-pulse 1.6s ease-out 3;
+  }
+
+  @supports (animation-timeline: view()) {
+    /* Draws down to about 65% of the viewport height (the 35% end inset) as you scroll. */
+    .git-line-progress {
+      animation: git-draw linear both;
+      animation-timeline: view(block 0% 35%);
+      animation-range: entry-crossing 0% entry-crossing 100%;
+    }
+
+    .git-reveal {
+      animation: git-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
+}
+
+@keyframes git-draw {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes git-reveal {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes git-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px color-mix(in oklab, var(--color-accent) 0%, transparent);
+  }
+}
+
+/* ==========================================================================
+   Custom cursor (CustomCursor.tsx): mouse only, decorative.
+   JS sets data-custom-cursor on <html> only while it is active (fine hover pointer, no
+   forced-colors, no reduced motion), so without JS, on touch, or when those change the
+   native cursor stays. Unlayered on purpose: it must beat the cursor styles in @layer.
+   ========================================================================== */
+.custom-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 150ms ease-out;
+}
+
+.custom-cursor[data-state="hidden"] {
+  opacity: 0;
+}
+
+/* 0x0 box sitting exactly on the pointer: JS writes translate3d(x, y) rotate(tilt), and
+   because the box has no size the rotation pivots on the click point. */
+.custom-cursor-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+
+/* Top-down computer mouse, 20x36 SVG (body 18x28). Its click point (the outer edge of the
+   top-left arc, SVG coords 3.1, 9.1) is shifted onto the pointer, and scale pivots there too,
+   so neither growing nor tilting moves the click point. The 1px background halo keeps it
+   readable on the dark scene and on the cream theme. */
+.custom-cursor-mouse {
+  position: absolute;
+  top: -9.1px;
+  left: -3.1px;
+  display: block;
+  overflow: visible;
+  transform-origin: 3.1px 9.1px;
+  scale: 1;
+  /* Background halo for contrast, then a soft accent glow. */
+  filter: drop-shadow(0 0 1px var(--background))
+    drop-shadow(0 0 4px color-mix(in oklab, var(--accent) 45%, transparent));
+  transition:
+    scale 150ms ease-out,
+    filter 150ms ease-out;
+}
+
+/* Moulded body: the fill attribute points at the gradient; its stops read the tokens here. */
+.custom-cursor-shade-top {
+  stop-color: var(--surface);
+}
+
+.custom-cursor-shade-bottom {
+  stop-color: var(--background);
+}
+
+.custom-cursor-body {
+  fill-opacity: 0.9;
+}
+
+/* Curved light catch on the upper-left edge: white on cream, cream on the dark theme. */
+.custom-cursor-highlight {
+  fill: none;
+  stroke: var(--accent-contrast);
+  stroke-opacity: 0.35;
+  stroke-width: 0.75;
+  stroke-linecap: round;
+}
+
+.dark .custom-cursor-highlight {
+  stroke: var(--text);
+  stroke-opacity: 0.25;
+}
+
+.custom-cursor-grips {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-opacity: 0.5;
+  stroke-width: 0.75;
+  stroke-linecap: round;
+}
+
+/* "Z" monogram in the palm. */
+.custom-cursor-monogram {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.7;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.custom-cursor-outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+/* Button areas: empty by default; the left lights on hover targets, the pressed one goes solid. */
+.custom-cursor-button {
+  fill: var(--accent);
+  fill-opacity: 0;
+  transition: fill-opacity 150ms ease-out;
+}
+
+.custom-cursor-split {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+
+/* Scroll wheel: accent base, darker 1px ribs (clipped to the wheel), background edge on top
+   to separate it from a lit button. While .is-spinning the ribs loop by one 2px period. */
+.custom-cursor-wheel-base {
+  fill: var(--accent);
+  fill-opacity: 0.75;
+  transition: fill-opacity 120ms ease-out;
+}
+
+.custom-cursor-wheel-stripes {
+  fill: var(--background);
+  fill-opacity: 0.55;
+}
+
+.custom-cursor-wheel-edge {
+  fill: none;
+  stroke: var(--background);
+  stroke-width: 0.5;
+}
+
+.custom-cursor.is-spinning .custom-cursor-wheel-base {
+  fill-opacity: 1;
+}
+
+.custom-cursor.is-spinning[data-wheel="down"] .custom-cursor-wheel-stripes {
+  animation: custom-cursor-wheel-down 160ms linear infinite;
+}
+
+.custom-cursor.is-spinning[data-wheel="up"] .custom-cursor-wheel-stripes {
+  animation: custom-cursor-wheel-up 160ms linear infinite;
+}
+
+@keyframes custom-cursor-wheel-down {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(2px);
+  }
+}
+
+@keyframes custom-cursor-wheel-up {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+/* Cable sways a few degrees against the tilt (--tilt is set by the tilt frame, unitless deg),
+   pivoting where it leaves the body; the transition gives it a slight lag. */
+.custom-cursor-cable {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.5;
+  stroke-width: 1;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 10px 7px;
+  transform: rotate(calc(var(--tilt, 0) * -0.35deg));
+  transition: transform 180ms ease-out;
+}
+
+.custom-cursor:is([data-state="interactive"], [data-state="globe"]) .custom-cursor-mouse {
+  scale: 1.15;
+  filter: drop-shadow(0 0 1px var(--background))
+    drop-shadow(0 0 5px color-mix(in oklab, var(--accent) 70%, transparent));
+}
+
+.custom-cursor:is([data-state="interactive"], [data-state="globe"]) .custom-cursor-button-left {
+  fill-opacity: 0.6;
+}
+
+.custom-cursor[data-pressed] .custom-cursor-mouse {
+  scale: 0.92;
+  transition-duration: 100ms;
+}
+
+.custom-cursor[data-pressed="left"] .custom-cursor-button-left,
+.custom-cursor[data-pressed="right"] .custom-cursor-button-right {
+  fill-opacity: 1;
+  transition-duration: 100ms;
+}
+
+@media (forced-colors: active), (prefers-reduced-motion: reduce), (hover: none), (pointer: coarse) {
+  .custom-cursor {
+    display: none;
+  }
+}
+
+/* Hide the native cursor, including elements that set their own, but not over text fields. */
+html[data-custom-cursor] body,
+html[data-custom-cursor] :is(a, button, summary, label, [role="tab"], [role="button"], [tabindex]:not([tabindex="-1"]), .skill-globe, .skill-globe-word, [class*="cursor-"]):not(:is(textarea, select, input[type="text"], input[type="email"], input[type="search"], input[type="url"], input[type="tel"], input[type="password"], input[type="number"], input:not([type]))) {
+  cursor: none;
+}
+
+html[data-custom-cursor] :is(textarea, input[type="text"], input[type="email"], input[type="search"], input[type="url"], input[type="tel"], input[type="password"], input[type="number"], input:not([type])) {
+  cursor: text;
+}
+
+html[data-custom-cursor] select {
+  cursor: default;
+}
+
+/* ==========================================================================
+   Boot intro
+   Full-screen terminal overlay on the first home visit per session (BootIntro.tsx).
+   It is in the server HTML, so it covers the page from first paint. Safety net: this
+   CSS alone hides it after 2.6s (+0.3s fade) even if JS never runs. The head script
+   in layout.tsx sets html[data-booted] to skip it (other pages, returning visitor,
+   reduced motion). Timings mirror BOOT_* in src/lib/boot.ts.
+   ========================================================================== */
+:root {
+  --boot-fade: 300ms;
+}
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 9000; /* above the header, below the custom cursor (9999) */
+  display: flex;
+  align-items: center;
+  padding: 1.5rem;
+  background-color: var(--background);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  animation:
+    boot-safety 2900ms linear forwards,
+    boot-pass 1ms linear 1200ms forwards;
+}
+
+.boot-col {
+  width: 100%;
+  max-width: 28rem; /* max-w-md */
+  margin-inline: auto;
+  text-align: left;
+}
+
+.boot-line {
+  min-height: 1.5em; /* keeps the column from jumping while lines type in */
+  margin: 0;
+  white-space: pre;
+}
+
+.boot-accent {
+  color: var(--accent);
+}
+
+.boot-line[data-active]::after {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.125em;
+  vertical-align: text-bottom;
+  background-color: currentColor;
+}
+
+/* JS fade-out: replaces the safety-net animation. */
+.boot[data-leaving] {
+  pointer-events: none;
+  animation: boot-leave var(--boot-fade) ease-out forwards;
+}
+
+html[data-booted] .boot {
+  display: none;
+}
+
+@keyframes boot-safety {
+  0%,
+  89.65% {
+    opacity: 1;
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes boot-pass {
+  to {
+    pointer-events: none;
+  }
+}
+
+@keyframes boot-leave {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .boot-line[data-active]::after {
+    animation: boot-caret 1s steps(1) infinite;
+  }
+}
+
+@keyframes boot-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   Page transition
+   Dark overlay between the home page and /projects/[slug] (PageTransition.tsx).
+   Fades in over 300ms on click, then lifts over 450ms once the new route is there.
+   While it lifts, html[data-transition] adds the same delay to the projector entrance
+   animations (--transition-delay, used in the "Projector" block), so the screen unrolls
+   and the beam turns on after the room is visible. Decorative only; hidden completely
+   under prefers-reduced-motion: reduce (the component also skips interception then).
+   ========================================================================== */
+:root {
+  --transition-in: 300ms;
+  --transition-out: 450ms;
+}
+
+html[data-transition] {
+  --transition-delay: var(--transition-out);
+}
+
+.page-transition {
+  /* Dark-scope background (#1a120d) and a darker edge; fixed so it also works in light theme. */
+  --transition-ink: #1a120d;
+  --transition-ink-deep: #120b07;
+  position: fixed;
+  inset: 0;
+  z-index: 9500; /* above the header (30) and boot intro (9000), below the custom cursor (9999) */
+  background: radial-gradient(
+    ellipse 90% 80% at 50% 45%,
+    var(--transition-ink) 0%,
+    var(--transition-ink) 35%,
+    var(--transition-ink-deep) 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-out) ease-out;
+}
+
+.page-transition[data-covering] {
+  opacity: 1;
+  pointer-events: auto;
+  transition-duration: var(--transition-in);
+  transition-timing-function: ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition {
+    display: none;
+  }
+}
+
+/* <main> gets focus after a transition so keyboard users are not left at the old link.
+   It is not interactive, so no ring around the whole page. */
+main[tabindex="-1"]:focus {
+  outline: none;
+}

@@ -6,9 +6,7 @@ resources:
   - "skill://.kiro/skills/*/SKILL.md"
 permissions:
   rules:
-    - capability: fs_write
-      match: ["**/*"]
-      effect: deny
+ 
     - capability: shell
       match: ["git status", "git diff *", "git diff", "git log *", "npm run build", "npm test", "npm run lint"]
       effect: allow

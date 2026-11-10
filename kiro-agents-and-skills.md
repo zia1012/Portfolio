@@ -68,9 +68,7 @@ An explicit deny is the correct way to express "this agent must not write":
 ```yaml
 permissions:
   rules:
-    - capability: fs_write
-      match: ["**/*"]
-      effect: deny
+   
 ```
 
 ### The rule for deciding where content goes
@@ -369,9 +367,7 @@ permissions:
     - capability: fs_write
       match: ["tests/**"]
       effect: allow
-    - capability: fs_write
-      match: ["**/*"]
-      effect: deny
+    
     - capability: shell
       match: ["npm test", "npm run typecheck"]
       effect: allow
@@ -509,9 +505,7 @@ permissions:
     - capability: fs_write
       match: ["tests/**"]
       effect: allow
-    - capability: fs_write
-      match: ["**/*"]
-      effect: deny
+    
     - capability: shell
       match: ["npm test", "npx vitest run *", "npm run typecheck"]
       effect: allow
